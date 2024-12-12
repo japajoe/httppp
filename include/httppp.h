@@ -7,6 +7,8 @@
 #include <cstring>
 #include <vector>
 #include <exception>
+#include <sstream>
+#include <type_traits>
 
 #ifdef _WIN32
 #ifdef _WIN32_WINNT
@@ -66,7 +68,6 @@ namespace httppp {
     class Socket {
     public:
         Socket();
-        Socket(Socket *socket);
         Socket(AddressFamily addressFamily);
         Socket(const Socket &other);
         Socket(Socket &&other) noexcept;
@@ -190,6 +191,17 @@ namespace httppp {
         static std::string toLower(const std::string &s);
         static std::string toUpper(const std::string &s);
         static std::vector<std::string> split(const std::string &s, const std::string &separator);
+        template <typename T>
+        static bool parseNumber(const std::string& str, T& number) {
+            // Check if T is a numeric type
+            static_assert(std::is_arithmetic<T>::value, "T must be a numeric type");
+
+            std::istringstream iss(str);
+            iss >> number;
+
+            // Check if the conversion was successful
+            return !iss.fail() && iss.eof();
+        }
     };
 }
 

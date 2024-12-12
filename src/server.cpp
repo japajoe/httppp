@@ -2,6 +2,7 @@
 #include <future>
 #include <sstream>
 #include <stdexcept>
+#include <algorithm>
 #include <signal.h>
 
 namespace httppp {
@@ -185,49 +186,40 @@ namespace httppp {
     }
 
     HeaderError Server::readHeader(NetworkStream &socket, std::string &header) {
-        const std::string endOfHeader = "\r\n\r\n";
-        constexpr size_t BUFFER_SIZE = 1024;        
-        char buffer[BUFFER_SIZE]; // Buffer to hold peeked data
-        memset(buffer, 0, BUFFER_SIZE);
+        const size_t bufferSize = 1024; // Size of the buffer for reading
+        char buffer[bufferSize];
+        size_t headerEnd = 0;
 
-        size_t endOfHeaderLength = endOfHeader.length();
-        size_t totalBytesRead = 0;
-
+        // Peek to find the end of the header
         while (true) {
-            // Peek into the socket
-            ssize_t bytesPeeked = socket.peek(buffer, BUFFER_SIZE);
-            if (bytesPeeked <= 0) {
+            ssize_t bytesPeeked = socket.peek(buffer, bufferSize);
+            if (bytesPeeked < 0) {
                 printf("HeaderError::FailedToPeek\n");
                 return HeaderError::FailedToPeek;
             }
 
-            // Convert peeked data to string for easier processing
-            std::string peekedData(buffer, bytesPeeked);
-            header.append(peekedData);
-            totalBytesRead += bytesPeeked;
-
-            // Check if the end of the header has been reached
-            if (header.length() >= endOfHeaderLength && 
-                header.compare(header.length() - endOfHeaderLength, endOfHeaderLength, endOfHeader) == 0) {
-                break; // End of header found
+            // Look for the end of the header (double CRLF)
+            const char* endOfHeader = std::search(buffer, buffer + bytesPeeked, "\r\n\r\n", "\r\n\r\n" + 4);
+            if (endOfHeader != buffer + bytesPeeked) {
+                headerEnd = endOfHeader - buffer + 4; // Include the length of the CRLF
+                break;
             }
         }
 
-        // Now read the header from the socket
-        std::string completeHeader;
-        completeHeader.resize(totalBytesRead);
-        ssize_t bytesRead = socket.read(&completeHeader[0], totalBytesRead);
-        if (bytesRead <= 0) {
-            // Handle error or end of stream
+        // Now read the header
+        header.resize(headerEnd);
+        ssize_t bytesRead = socket.read(&header[0], headerEnd);
+        if (bytesRead < 0) {
             printf("HeaderError::FailedToRead\n");
             return HeaderError::FailedToRead;
         }
-        if(totalBytesRead > configuration.maxHeaderSize) {
+
+        if(header.size() > configuration.maxHeaderSize) {
             printf("HeaderError::MaxSizeExceeded\n");
             return HeaderError::MaxSizeExceeded;
         }
 
-        return HeaderError::None; // Return the complete HTTP header
+        return HeaderError::None;
     }
 
     HttpMethod Server::readMethod(const std::string &header) {

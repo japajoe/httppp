@@ -29,11 +29,6 @@ namespace httppp {
         s.fd = -1;
     }
 
-    Socket::Socket(Socket *socket) {
-        initializeWinsock2();
-        std::memcpy(this, socket, sizeof(Socket));
-    }
-
     Socket::Socket(AddressFamily addressFamily) {
         initializeWinsock2();
         std::memset(&s, 0, sizeof(socket_t));

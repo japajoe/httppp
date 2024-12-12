@@ -33,6 +33,13 @@ namespace httppp {
         HttpMethod method;
         std::string path;
         Headers headers;
+        bool getHeaderValue(const std::string &key, std::string &value) {
+            if(headers.count(key)) {
+                value = headers[key];
+                return true;
+            }
+            return false;
+        }
         std::string getMethodString() const {
             switch(method) {
                 case HttpMethod::GET:
@@ -100,7 +107,7 @@ namespace httppp {
         }
     };
 
-    using RequestHandler = std::function<void(NetworkStream connection, const HttpRequest &request)>;
+    using RequestHandler = std::function<void(NetworkStream connection, HttpRequest &request)>;
 
     class Server {
     public:

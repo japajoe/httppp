@@ -2,19 +2,25 @@
 
 using namespace httppp;
 
-void onRequest(NetworkStream connection, const HttpRequest &request) {
-    std::string content = "<h1>Hello world</h1>";
-    content += "<p>You requested: " + request.path + "</p>";
+void onRequest(NetworkStream connection, HttpRequest &request) {
+    if(request.method == HttpMethod::GET) {
+        std::string content = "<h1>Hello world</h1>";
+        content += "<p>You requested: " + request.path + "</p>";
 
-    HttpResponse response(200);
-    response.addHeader("Content-Length", std::to_string(content.size()));
-    response.addHeader("Content-Type", "text/html");
-    response.addHeader("Connection", "close");
-    response.addContent(content);
+        HttpResponse response(200);
+        response.addHeader("Content-Length", std::to_string(content.size()));
+        response.addHeader("Content-Type", "text/html");
+        response.addHeader("Connection", "close");
+        response.addContent(content);
 
-    std::string responseText = response.getText();
+        std::string responseText = response.getText();
 
-    connection.write(responseText.c_str(), responseText.size());
+        connection.write(responseText.c_str(), responseText.size());
+    } else {
+        HttpResponse response(501); //501: Method not implemented
+        std::string responseText = response.getText();
+        connection.write(responseText.c_str(), responseText.size());
+    }
     connection.close();
 }
 
