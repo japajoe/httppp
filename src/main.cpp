@@ -3,7 +3,7 @@
 using namespace httppp;
 
 void onRequest(NetworkStream connection, const HttpRequest &request) {
-    std::string content = "<h1>Hello boppers!</h1>";
+    std::string content = "<h1>Hello world</h1>";
     content += "<p>You requested: " + request.path + "</p>";
 
     HttpResponse response(200);
