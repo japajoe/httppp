@@ -20,7 +20,13 @@ void onRequest(NetworkStream connection, const HttpRequest &request) {
 
 int main(int argc, char **argv) {
     Configuration configuration;
-    configuration.loadDefault();
+    configuration.bindAddress = "0.0.0.0";
+    configuration.certificatePath = "cert.pem";
+    configuration.privateKeyPath = "key.pem";
+    configuration.hostName = "localhost";
+    configuration.maxHeaderSize = 8192;
+    configuration.port = 8080;
+    configuration.portSSL = 8081;
 
     Server server(configuration);
     server.onRequest = onRequest;
