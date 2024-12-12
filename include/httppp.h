@@ -1,5 +1,5 @@
-#ifndef HTTPPP_HTTPPP_HPP
-#define HTTPPP_HTTPPP_HPP
+#ifndef HTTPPP_HPP
+#define HTTPPP_HPP
 
 #include <string>
 #include <cstdint>
@@ -9,6 +9,11 @@
 #include <exception>
 #include <sstream>
 #include <type_traits>
+#include <atomic>
+#include <thread>
+#include <functional>
+#include <unordered_map>
+#include <openssl/ssl.h>
 
 #ifdef _WIN32
 #ifdef _WIN32_WINNT
@@ -29,8 +34,6 @@
 #include <netdb.h>
 #include <fcntl.h> // For fcntl
 #endif
-
-#include <openssl/ssl.h>
 
 namespace httppp {
     typedef struct sockaddr_in sockaddr_in_t;
@@ -193,15 +196,143 @@ namespace httppp {
         static std::vector<std::string> split(const std::string &s, const std::string &separator);
         template <typename T>
         static bool parseNumber(const std::string& str, T& number) {
-            // Check if T is a numeric type
             static_assert(std::is_arithmetic<T>::value, "T must be a numeric type");
-
             std::istringstream iss(str);
             iss >> number;
-
-            // Check if the conversion was successful
             return !iss.fail() && iss.eof();
         }
+    };
+
+    enum class HeaderError {
+        None,
+        FailedToPeek,
+        FailedToRead,
+        EndNotFound,
+        MaxSizeExceeded
+    };
+
+    enum class HttpMethod {
+        GET,
+        POST,
+        PUT,
+        DELETE,
+        HEAD,
+        OPTIONS,
+        PATCH,
+        TRACE,
+        CONNECT
+    };
+
+    using Headers = std::unordered_map<std::string,std::string>;
+
+    struct HttpRequest {
+        HttpMethod method;
+        std::string path;
+        Headers headers;
+        bool getHeaderValue(const std::string &key, std::string &value) {
+            if(headers.count(key)) {
+                value = headers[key];
+                return true;
+            }
+            return false;
+        }
+        std::string getMethodString() const {
+            switch(method) {
+                case HttpMethod::GET:
+                    return "GET";
+                case HttpMethod::POST:
+                    return "POST";
+                case HttpMethod::PUT:
+                    return "PUT";
+                case HttpMethod::DELETE:
+                    return "DELETE";
+                case HttpMethod::HEAD:
+                    return "HEAD";
+                case HttpMethod::OPTIONS:
+                    return "OPTIONS";
+                case HttpMethod::PATCH:
+                    return "PATCH";
+                case HttpMethod::TRACE:
+                    return "TRACE";
+                case HttpMethod::CONNECT:
+                    return "CONNECT";
+            }
+            return "UNSUPPORTED";
+        }
+    };
+
+    struct HttpResponse {
+        int responseCode;
+        std::string header;
+        std::string content;
+        HttpResponse(int responseCode) {
+            this->responseCode = responseCode;
+        }
+        void addHeader(const std::string &key, const std::string &value) {
+            header += key + ": " + value + "\r\n";
+        }
+        void addContent(const std::string &s) {
+            content = s;
+        }
+        std::string getText() const {
+            if(content.size() > 0) {
+                return "HTTP/1.1 " + std::to_string(responseCode) + "\r\n" + header + "\r\n" + content;
+            } else {
+                return "HTTP/1.1 " + std::to_string(responseCode) + "\r\n" + header + "\r\n";
+            }
+        }
+    };
+
+    struct Configuration {
+        uint16_t port;
+        uint16_t portSSL;
+        uint32_t maxHeaderSize;
+        std::string bindAddress;
+        std::string certificatePath;
+        std::string privateKeyPath;
+        std::string hostName;
+
+        void loadDefault() {
+            port = 8080;
+            portSSL = 8081;
+            maxHeaderSize = 8192;
+            bindAddress = "0.0.0.0";
+            certificatePath = "cert.pem";
+            privateKeyPath = "key.pem";
+            hostName = "localhost";
+        }
+    };
+
+    using RequestHandler = std::function<void(NetworkStream connection, HttpRequest &request)>;
+
+    class Server {
+    public:
+        RequestHandler onRequest;
+        Server();
+        Server(const Configuration &configuration);
+        Server(const Server &other);
+        Server(Server &&other) noexcept;
+        Server& operator=(const Server &other);
+        Server& operator=(Server &&other) noexcept;
+        void start();
+        void stop();
+    private:
+        Configuration configuration;
+        std::vector<TcpListener> listeners;
+        SslContext sslContext;
+        std::atomic<bool> isRunning;
+        std::thread listenThread;
+        void listen();
+        void handleClient(NetworkStream connection);
+        HeaderError readHeader(NetworkStream &socket, std::string &header);
+        HttpMethod readMethod(const std::string &header);
+        std::string readPath(const std::string &header);
+        Headers readHeaderFields(const std::string &header);
+        void sendOk(NetworkStream client);
+        void sendBadRequest(NetworkStream client);
+        void redirectToHttps(NetworkStream client, const HttpRequest &request);
+        void registerSignals();
+        void unregisterSignals();
     };
 }
 
