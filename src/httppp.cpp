@@ -1,3 +1,25 @@
+// MIT License
+
+// Copyright (c) 2024 W.M.R Jap-A-Joe
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #include "httppp.h"
 #include <utility> 
 #include <algorithm>
@@ -528,42 +550,41 @@ namespace httppp {
         }
     }
 
+    bool SslStream::isSet() const {
+        return ssl != nullptr;
+    }
+
     //////////////////////////
     //////[NetworkStream]/////
     //////////////////////////
 
     NetworkStream::NetworkStream() {
-        secure = false;
+
     }
 
     NetworkStream::NetworkStream(const Socket &socket) {
         this->socket = socket;
-        secure = false;
     }
 
     NetworkStream::NetworkStream(const Socket &socket, const SslStream &ssl) {
         this->socket = socket;
         this->ssl = ssl;
-        secure = true;
     }
 
     NetworkStream::NetworkStream(const NetworkStream &other) {
         socket = other.socket;
         ssl = other.ssl;
-        secure = other.secure;
     }
 
     NetworkStream::NetworkStream(NetworkStream &&other) noexcept {
         socket = std::move(other.socket);
         ssl = std::move(other.ssl);
-        secure = other.secure;
     }
 
     NetworkStream& NetworkStream::operator=(const NetworkStream &other) {
         if(this != &other) {
             socket = other.socket;
             ssl = other.ssl;
-            secure = other.secure;
         }
         return *this;
     }
@@ -572,47 +593,46 @@ namespace httppp {
         if(this != &other) {
             socket = std::move(other.socket);
             ssl = std::move(other.ssl);
-            secure = other.secure;
         }
         return *this;
     }
 
     int32_t NetworkStream::readByte() {
-        if(secure)
+        if(ssl.isSet())
             return ssl.readByte();
         else
             return socket.readByte();
     }
 
     ssize_t NetworkStream::read(void *buffer, size_t size) {
-        if(secure)
+        if(ssl.isSet())
             return ssl.read(buffer, size);
         else
             return socket.read(buffer, size);
     }
 
     ssize_t NetworkStream::write(const void *buffer, size_t size) {
-        if(secure)
+        if(ssl.isSet())
             return ssl.write(buffer, size);
         else
             return socket.write(buffer, size);
     }
 
     ssize_t NetworkStream::peek(void *buffer, size_t size) {
-        if(secure)
+        if(ssl.isSet())
             return ssl.peek(buffer, size);
         else
             return socket.peek(buffer, size);
     }
 
     void NetworkStream::close() {
-        if(secure)
+        if(ssl.isSet())
             ssl.close();
         socket.close();
     }
 
     bool NetworkStream::isSecure() const {
-        return secure;
+        return ssl.isSet();
     }
 
     //////////////////////////
@@ -703,17 +723,12 @@ namespace httppp {
     /////////[Server]/////////
     //////////////////////////    
 
-#ifdef _WIN32
     enum class SignalType : int {
         SigInt = SIGINT,
-    };
-#else
-    enum class SignalType : int {
-        SigInt = SIGINT,
-        SigKill = SIGKILL,
+#ifndef _WIN32
         SigPipe = SIGPIPE,
-    };
 #endif
+    };
 
     typedef void (*signal_handler_t)(int);
 
@@ -744,7 +759,6 @@ namespace httppp {
     #else
         switch(signum) {
             case SIGINT:
-            case SIGKILL:
                 for(auto server : servers) {
                     if(server)
                         server->stop();
@@ -1075,7 +1089,6 @@ namespace httppp {
         registerSignal(SignalType::SigInt, &signalHandler);
     #else
         registerSignal(SignalType::SigInt, &signalHandler);
-        registerSignal(SignalType::SigKill, &signalHandler);
         registerSignal(SignalType::SigPipe, &signalHandler);
     #endif
     }
