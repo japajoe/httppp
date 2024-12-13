@@ -19,14 +19,12 @@ void onRequest(NetworkStream connection, HttpRequest &request) {
         content += "<p>You requested: " + request.path + "</p>";
 
         HttpResponse response(200);
-        response.addHeader("Content-Length", std::to_string(content.size()));
-        response.addHeader("Content-Type", "text/html");
-        response.addHeader("Connection", "close");
-        response.addContent(content);
+        response.setHeader("Content-Length", std::to_string(content.size()));
+        response.setHeader("Content-Type", "text/html");
+        response.setHeader("Connection", "close");
 
-        std::string responseText = response.getText();
-
-        connection.write(responseText.c_str(), responseText.size());
+        TextStream textStream(content);
+        connection.write(connection, &textStream);
     } else {
         HttpResponse response(501); //501: Method not implemented
         std::string responseText = response.getText();

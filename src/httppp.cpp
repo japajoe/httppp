@@ -636,6 +636,46 @@ namespace httppp {
     }
 
     //////////////////////////
+    ///////[TextStream]///////
+    //////////////////////////
+
+    TextStream::TextStream() {
+
+    }
+
+    TextStream::TextStream(const std::string &text) {
+        this->text = text;
+    }
+
+    TextStream::TextStream(const TextStream &other) {
+        text = other.text;
+    }
+
+    TextStream::TextStream(TextStream &&other) noexcept {
+        text = std::move(other.text);
+    }
+
+    TextStream& TextStream::operator=(const TextStream &other) {
+        if(this != &other) {
+            text = other.text;
+        }
+        return *this;
+    }
+
+    TextStream& TextStream::operator=(TextStream &&other) noexcept {
+        if(this != &other) {
+            text = std::move(other.text);
+        }
+        return *this;
+    }
+    
+    ssize_t TextStream::writeTo(NetworkStream stream) {
+        if(text.size() == 0)
+            return 0;
+        return stream.write(text.c_str(), text.size());
+    }
+
+    //////////////////////////
     /////////[String]/////////
     //////////////////////////
 

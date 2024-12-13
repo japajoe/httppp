@@ -210,6 +210,19 @@ namespace httppp {
         virtual ssize_t writeTo(NetworkStream stream) = 0;
     };
 
+    class TextStream : public IContentStream {
+    public:
+        TextStream();
+        TextStream(const std::string &text);
+        TextStream(const TextStream &other);
+        TextStream(TextStream &&other) noexcept;
+        TextStream& operator=(const TextStream &other);
+        TextStream& operator=(TextStream &&other) noexcept;
+        ssize_t writeTo(NetworkStream stream) override;
+    private:
+        std::string text;
+    };
+
     class String {
     public:
         static bool contains(const std::string &haystack, const std::string &needle);
