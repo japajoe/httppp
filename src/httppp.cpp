@@ -26,6 +26,7 @@
 #include <future>
 #include <sstream>
 #include <stdexcept>
+#include <fstream>
 #include <signal.h>
 
 #ifndef SOCKET_ERROR
@@ -673,6 +674,69 @@ namespace httppp {
         if(text.size() == 0)
             return 0;
         return stream.write(text.c_str(), text.size());
+    }
+
+    //////////////////////////
+    ///////[FileStream]///////
+    //////////////////////////
+
+    FileStream::FileStream() {
+
+    }
+
+    FileStream::FileStream(const std::string &filePath) {
+        this->filePath = filePath;
+    }
+
+    FileStream::FileStream(const FileStream &other) {
+        filePath = other.filePath;
+    }
+
+    FileStream::FileStream(FileStream &&other) {
+        filePath = std::move(other.filePath);
+    }
+
+    FileStream& FileStream::operator=(const FileStream &other) {
+        if(this != &other) {
+            filePath = other.filePath;
+        }
+        return *this;
+    }
+
+    FileStream& FileStream::operator=(FileStream &&other) {
+        if(this != &other) {
+            filePath = std::move(other.filePath);
+        }
+        return *this;
+    }
+
+    ssize_t FileStream::writeTo(NetworkStream stream) {
+        if (filePath.size() == 0)
+            return 0;
+
+        std::ifstream file(filePath, std::ios::binary); // Open the file in binary mode
+
+        if (!file)
+            return 0;
+
+        const size_t chunkSize = 4096;
+        std::vector<char> buffer(chunkSize);
+        ssize_t totalBytes = 0;
+
+        while (file.read(buffer.data(), chunkSize) || file.gcount() > 0) {
+            std::streamsize bytesRead = file.gcount(); // Get the number of bytes read
+            totalBytes += bytesRead;
+
+            if(bytesRead > 0) {
+                ssize_t bytesWritten = stream.write(buffer.data(), bytesRead);
+
+                if(bytesWritten <= 0)
+                    break;
+            }
+        }
+
+        file.close(); // Close the file
+        return totalBytes;
     }
 
     //////////////////////////

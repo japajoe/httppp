@@ -223,6 +223,19 @@ namespace httppp {
         std::string text;
     };
 
+    class FileStream : public IContentStream {
+    public:
+        FileStream();
+        FileStream(const std::string &filePath);
+        FileStream(const FileStream &other);
+        FileStream(FileStream &&other);
+        FileStream& operator=(const FileStream &other);
+        FileStream& operator=(FileStream &&other);
+        ssize_t writeTo(NetworkStream stream) override;
+    private:
+        std::string filePath;
+    };
+
     class String {
     public:
         static bool contains(const std::string &haystack, const std::string &needle);
