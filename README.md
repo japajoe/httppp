@@ -43,7 +43,9 @@ int main(int argc, char **argv) {
     configuration.hostName = "localhost";
     configuration.maxHeaderSize = 8192;
     configuration.port = 8080;
-    configuration.portSSL = 8081;
+    configuration.portHttps = 8081;
+    configuration.useHttps = true;
+    configuration.useHttpsForwarding = true;
 
     Server server(configuration);
     server.onRequest = onRequest;
