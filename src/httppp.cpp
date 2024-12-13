@@ -1110,10 +1110,9 @@ namespace httppp {
                                 ":" + std::to_string(configuration.portHttps) + 
                                 request.path;
         HttpResponse response(301);
-        response.addHeader("Location", location);
-        response.addHeader("Connection", "close");
-        std::string responseText = response.getText();
-        client.write(responseText.c_str(), responseText.size());
+        response.setHeader("Location", location);
+        response.setHeader("Connection", "close");
+        response.send(client);
         client.close();
     }
 

@@ -205,6 +205,11 @@ namespace httppp {
         SslStream ssl;
     };
 
+    class IContentStream {
+    public:
+        virtual ssize_t writeTo(NetworkStream stream) = 0;
+    };
+
     class String {
     public:
         static bool contains(const std::string &haystack, const std::string &needle);
@@ -287,22 +292,22 @@ namespace httppp {
 
     struct HttpResponse {
         int responseCode;
-        std::string header;
-        std::string content;
+        Headers headers;
         HttpResponse(int responseCode) {
             this->responseCode = responseCode;
         }
-        void addHeader(const std::string &key, const std::string &value) {
-            header += key + ": " + value + "\r\n";
+        void setHeader(const std::string &key, const std::string &value) {
+            headers[key] = value;
         }
-        void addContent(const std::string &s) {
-            content = s;
-        }
-        std::string getText() const {
-            if(content.size() > 0) {
-                return "HTTP/1.1 " + std::to_string(responseCode) + "\r\n" + header + "\r\n" + content;
-            } else {
-                return "HTTP/1.1 " + std::to_string(responseCode) + "\r\n" + header + "\r\n";
+        void send(NetworkStream connection, IContentStream *content = nullptr) {
+            std::string response = "HTTP/1.1 " + std::to_string(responseCode) + "\r\n";
+            for(const auto &item : headers) {
+                response += item.first + ": " + item.second + "\r\n";
+            }
+            response += "\r\n";
+            connection.write(response.c_str(), response.size());
+            if(content != nullptr) {
+                content->writeTo(connection);
             }
         }
     };
