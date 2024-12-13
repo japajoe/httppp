@@ -216,6 +216,8 @@ namespace httppp {
         static std::string toLower(const std::string &s);
         static std::string toUpper(const std::string &s);
         static std::vector<std::string> split(const std::string &s, const std::string &separator);
+        static ssize_t indexOf(const std::string &str, const std::string &subStr);
+        static std::string subString(const std::string &str, size_t startIndex, size_t length);
         template <typename T>
         static bool parseNumber(const std::string& str, T& number) {
             static_assert(std::is_arithmetic<T>::value, "T must be a numeric type");
@@ -307,21 +309,25 @@ namespace httppp {
 
     struct Configuration {
         uint16_t port;
-        uint16_t portSSL;
+        uint16_t portHttps;
         uint32_t maxHeaderSize;
         std::string bindAddress;
         std::string certificatePath;
         std::string privateKeyPath;
         std::string hostName;
+        bool useHttps;
+        bool useHttpsForwarding;
 
         void loadDefault() {
             port = 8080;
-            portSSL = 8081;
+            portHttps = 8081;
             maxHeaderSize = 8192;
             bindAddress = "0.0.0.0";
             certificatePath = "cert.pem";
             privateKeyPath = "key.pem";
             hostName = "localhost";
+            useHttps = true;
+            useHttpsForwarding = true;
         }
     };
 

@@ -719,6 +719,17 @@ namespace httppp {
         return substrings;
     }
 
+    ssize_t String::indexOf(const std::string &str, const std::string &subStr) {
+        size_t pos = str.find(subStr);
+        if (pos != std::string::npos) 
+            return static_cast<ssize_t>(pos);
+        return -1; // Indicates substring not found
+    }
+
+    std::string String::subString(const std::string &str, size_t startIndex, size_t length) {
+        return str.substr(startIndex, length);
+    }
+
     //////////////////////////
     /////////[Server]/////////
     //////////////////////////    
@@ -838,17 +849,29 @@ namespace httppp {
     }
 
     void Server::listen() {
-        try {
-            sslContext = SslContext(configuration.certificatePath, configuration.privateKeyPath);
-        } catch (const SslException &ex) {
-            printf("Failed to initialize SslContext: %s\n", ex.what());
-            isRunning.store(false);
-            return;
+
+        if(configuration.useHttps) {
+            try {
+                sslContext = SslContext(configuration.certificatePath, configuration.privateKeyPath);
+            } catch (const SslException &ex) {
+                printf("Failed to initialize SslContext: %s\n", ex.what());
+                isRunning.store(false);
+                return;
+            }
         }
 
         SocketOption options = SocketOption_Reuse | SocketOption_NonBlocking;
-        listeners.emplace_back(configuration.bindAddress, configuration.port, 10, options);
-        listeners.emplace_back(configuration.bindAddress, configuration.portSSL, 10, options);
+
+        if(configuration.useHttps) {
+            if(configuration.useHttpsForwarding) {
+                listeners.emplace_back(configuration.bindAddress, configuration.port, 10, options);
+                listeners.emplace_back(configuration.bindAddress, configuration.portHttps, 10, options);
+            } else {
+                listeners.emplace_back(configuration.bindAddress, configuration.portHttps, 10, options);
+            }
+        } else {
+            listeners.emplace_back(configuration.bindAddress, configuration.port, 10, options);
+        }
 
         for(size_t i = 0; i < listeners.size(); i++) {
             if(!listeners[i].start()) {
@@ -858,15 +881,23 @@ namespace httppp {
             }
         }
 
-        printf("Server listening on http://%s:%zu\n", configuration.hostName.c_str(), configuration.port);
-        printf("Server listening on https://%s:%zu\n", configuration.hostName.c_str(), configuration.portSSL);
+        if(configuration.useHttps) {
+            if(configuration.useHttpsForwarding) {
+                printf("Server listening on http://%s:%zu\n", configuration.hostName.c_str(), configuration.port);
+                printf("Server listening on https://%s:%zu\n", configuration.hostName.c_str(), configuration.portHttps);
+            } else {
+                printf("Server listening on https://%s:%zu\n", configuration.hostName.c_str(), configuration.portHttps);
+            }
+        } else {
+            printf("Server listening on http://%s:%zu\n", configuration.hostName.c_str(), configuration.port);
+        }
 
         while(isRunning.load()) {
             for(size_t i = 0; i < listeners.size(); i++) {
                 Socket client;
 
                 if(listeners[i].accept(client)) {
-                    if(listeners[i].getPort() == configuration.portSSL) {
+                    if(listeners[i].getPort() == configuration.portHttps) {
                         try {
                             SslStream sslStream(client, sslContext);
                             NetworkStream connection(client, sslStream);
@@ -921,9 +952,14 @@ namespace httppp {
         std::string m = request.getMethodString();
         printf("[%s] %s\n", m.c_str(), request.path.c_str());
 
-        if(!connection.isSecure()) {
-            redirectToHttps(connection, request);
-            return;
+        if(!connection.isSecure() && configuration.useHttps && configuration.useHttpsForwarding) {
+            std::string upgrade;
+            if(request.getHeaderValue("Upgrade-Insecure-Requests", upgrade)) {
+                if(upgrade == "1") {
+                    redirectToHttps(connection, request);
+                    return;
+                }
+            }
         }
 
         if(onRequest) {
@@ -934,20 +970,23 @@ namespace httppp {
     }
 
     HeaderError Server::readHeader(NetworkStream &socket, std::string &header) {
-        const size_t bufferSize = 1024;
-        char buffer[bufferSize];
+        const size_t bufferSize = configuration.maxHeaderSize;
+        std::vector<char> buffer;
+        buffer.resize(bufferSize);
         size_t headerEnd = 0;
         size_t totalHeaderSize = 0;
         bool endFound = false;
 
+        char *pBuffer = &buffer[0];
+
         // Peek to find the end of the header
         while (true) {
-            ssize_t bytesPeeked = socket.peek(buffer, bufferSize);
+            ssize_t bytesPeeked = socket.peek(pBuffer, bufferSize);
 
             totalHeaderSize += bytesPeeked;
 
             if(totalHeaderSize > configuration.maxHeaderSize) {
-                printf("HeaderError::MaxSizeExceeded\n");
+                printf("HeaderError::MaxSizeExceeded 1, %zu/%zu\n", totalHeaderSize, configuration.maxHeaderSize);
                 return HeaderError::MaxSizeExceeded;
             }
 
@@ -962,9 +1001,9 @@ namespace httppp {
             }
             
             // Look for the end of the header (double CRLF)
-            const char* endOfHeader = std::search(buffer, buffer + bytesPeeked, "\r\n\r\n", "\r\n\r\n" + 4);
-            if (endOfHeader != buffer + bytesPeeked) {
-                headerEnd = endOfHeader - buffer + 4; // Include the length of the CRLF
+            const char* endOfHeader = std::search(pBuffer, pBuffer + bytesPeeked, "\r\n\r\n", "\r\n\r\n" + 4);
+            if (endOfHeader != pBuffer + bytesPeeked) {
+                headerEnd = endOfHeader - pBuffer + 4; // Include the length of the CRLF
                 endFound = true;
                 break;
             }
@@ -984,7 +1023,7 @@ namespace httppp {
         }
 
         if(header.size() > configuration.maxHeaderSize) {
-            printf("HeaderError::MaxSizeExceeded\n");
+            printf("HeaderError::MaxSizeExceeded 2\n");
             return HeaderError::MaxSizeExceeded;
         }
 
@@ -1068,7 +1107,7 @@ namespace httppp {
 
     void Server::redirectToHttps(NetworkStream client, const HttpRequest &request) {
         std::string location = "https://" + configuration.hostName + 
-                                ":" + std::to_string(configuration.portSSL) + 
+                                ":" + std::to_string(configuration.portHttps) + 
                                 request.path;
         HttpResponse response(301);
         response.addHeader("Location", location);
