@@ -1005,13 +1005,15 @@ namespace httppp {
                         try {
                             SslStream sslStream(client, sslContext);
                             NetworkStream connection(client, sslStream);
-                            std::async(std::launch::async, &Server::handleClient, this, std::move(connection));
+                            auto result = std::async(std::launch::async, &Server::handleClient, this, std::move(connection));
+                            (void)result;
                         } catch (const SslException &ex) {
                             client.close();
                         }
                     } else {
                         NetworkStream connection(client);
-                        std::async(std::launch::async, &Server::handleClient, this, std::move(connection));
+                        auto result = std::async(std::launch::async, &Server::handleClient, this, std::move(connection));
+                        (void)result;
                     }
                 }
             }
@@ -1213,7 +1215,7 @@ namespace httppp {
         std::string location = "https://" + configuration.hostName + 
                                 ":" + std::to_string(configuration.portHttps) + 
                                 request.path;
-        HttpResponse response(301);
+        HttpResponse response(HttpStatusCode::MovedPermanently);
         response.setHeader("Location", location);
         response.setHeader("Connection", "close");
         response.send(client);

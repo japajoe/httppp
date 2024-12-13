@@ -18,7 +18,7 @@ void onRequest(NetworkStream connection, HttpRequest &request) {
         std::string content = "<h1>Hello world</h1>";
         content += "<p>You requested: " + request.path + "</p>";
 
-        HttpResponse response(200);
+        HttpResponse response(HttpStatusCode::OK);
         response.setHeader("Content-Length", std::to_string(content.size()));
         response.setHeader("Content-Type", "text/html");
         response.setHeader("Connection", "close");
