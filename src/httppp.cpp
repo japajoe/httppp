@@ -834,6 +834,15 @@ namespace httppp {
         return str.substr(startIndex, length);
     }
 
+    void String::replace(std::string &haystack, const std::string &needle, const std::string &replacement) {
+        size_t startPos = 0;
+
+        while ((startPos = haystack.find(needle, startPos)) != std::string::npos) {
+            haystack.replace(startPos, needle.length(), replacement);
+            startPos += replacement.length();
+        }
+    }
+
     //////////////////////////
     /////////[Server]/////////
     //////////////////////////    

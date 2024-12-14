@@ -249,6 +249,7 @@ namespace httppp {
         static std::vector<std::string> split(const std::string &s, const std::string &separator);
         static ssize_t indexOf(const std::string &str, const std::string &subStr);
         static std::string subString(const std::string &str, size_t startIndex, size_t length);
+        static void replace(std::string &haystack, const std::string &needle, const std::string &replacement);
         template <typename T>
         static bool parseNumber(const std::string& str, T& number) {
             static_assert(std::is_arithmetic<T>::value, "T must be a numeric type");

@@ -24,11 +24,10 @@ void onRequest(NetworkStream connection, HttpRequest &request) {
         response.setHeader("Connection", "close");
 
         TextStream textStream(content);
-        connection.write(connection, &textStream);
+        response.send(connection, &textStream);
     } else {
-        HttpResponse response(501); //501: Method not implemented
-        std::string responseText = response.getText();
-        connection.write(responseText.c_str(), responseText.size());
+        HttpResponse response(HttpStatusCode::MethodNotAllowed);
+        response.send(connection);
     }
     connection.close();
 }
