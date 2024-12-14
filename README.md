@@ -27,6 +27,7 @@ void onRequest(NetworkStream connection, HttpRequest &request) {
         response.send(connection, &textStream);
     } else {
         HttpResponse response(HttpStatusCode::MethodNotAllowed);
+        response.setHeader("Connection", "close");
         response.send(connection);
     }
     connection.close();
