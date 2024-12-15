@@ -153,13 +153,14 @@ namespace httppp {
     public:
         SslContext();
         SslContext(SSL_CTX *sslContext);
-        SslContext(const std::string &certificatePath, const std::string &privateKeyPath);
         SslContext(const SslContext &other);
         SslContext(SslContext &&other) noexcept;
         SslContext& operator=(const SslContext &other);
         SslContext& operator=(SslContext &&other) noexcept;
         void dispose();
-        SSL_CTX *getContext();
+        SSL_CTX *getContext() const;
+        bool isServerContext() const;
+        bool initialize(const char *certificatePath, const char *privateKeyPath);
     private:
         SSL_CTX *context;
     };
@@ -188,8 +189,8 @@ namespace httppp {
     class NetworkStream {
     public:
         NetworkStream();
-        NetworkStream(const Socket &socket);
-        NetworkStream(const Socket &socket, const SslStream &ssl);
+        NetworkStream(Socket socket);
+        NetworkStream(Socket &socket, SslStream ssl);
         NetworkStream(const NetworkStream &other);
         NetworkStream(NetworkStream &&other) noexcept;
         NetworkStream& operator=(const NetworkStream &other);
@@ -234,6 +235,15 @@ namespace httppp {
         ssize_t writeTo(NetworkStream stream) override;
     private:
         std::string filePath;
+    };
+
+    class File {
+    public:
+        static bool exists(const std::string &filePath);
+        static bool isWithinDirectory(const std::string &filePath, const std::string &directoryPath);
+        static size_t getSize(const std::string &filePath);
+        static std::string getExtension(const std::string &filePath);
+        static std::string readAllText(const std::string &filePath);
     };
 
     class String {

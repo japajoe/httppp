@@ -27,6 +27,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <fstream>
+#include <filesystem>
 #include <signal.h>
 
 #ifndef SOCKET_ERROR
@@ -375,37 +376,11 @@ namespace httppp {
     //////////////////////////
 
     SslContext::SslContext() {
-        this->context = SSL_CTX_new(TLS_method());
+        context = nullptr;
     }
 
     SslContext::SslContext(SSL_CTX *sslContext) {
         this->context = sslContext;
-    }
-
-    SslContext::SslContext(const std::string &certificatePath, const std::string &privateKeyPath) {
-        context = SSL_CTX_new(TLS_server_method());
-
-        if(context == nullptr) {
-            throw SslException("Failed to create SSL context");
-        }
-        
-        if (SSL_CTX_use_certificate_file(context, certificatePath.c_str(), SSL_FILETYPE_PEM) <= 0) {
-            SSL_CTX_free(context);
-            context = nullptr;
-            throw SslException("Failed to use certificate file");
-        }
-
-        if (SSL_CTX_use_PrivateKey_file(context, privateKeyPath.c_str(), SSL_FILETYPE_PEM) <= 0) {
-            SSL_CTX_free(context);
-            context = nullptr;
-            throw SslException("Failed to use private key file");
-        }
-
-        if (!SSL_CTX_check_private_key(context)) {
-            SSL_CTX_free(context);
-            context = nullptr;
-            throw SslException("Failed to check private key");
-        }
     }
 
     SslContext::SslContext(const SslContext &other) {
@@ -437,8 +412,57 @@ namespace httppp {
         }
     }
 
-    SSL_CTX *SslContext::getContext() {
+    SSL_CTX *SslContext::getContext() const {
         return context;
+    }
+
+    bool SslContext::isServerContext() const {
+        if(!context)
+            return false;
+        return SSL_CTX_check_private_key(context) == 1;
+    }
+
+    bool SslContext::initialize(const char *certificatePath, const char *privateKeyPath) {
+        if(context)
+            return true;
+        
+        if(certificatePath != nullptr && privateKeyPath != nullptr) {
+            context = SSL_CTX_new(TLS_server_method());
+
+            if(context == nullptr) {
+                printf("Failed to create SSL context\n");
+                return false;
+            }
+            
+            if (SSL_CTX_use_certificate_file(context, certificatePath, SSL_FILETYPE_PEM) <= 0) {
+                SSL_CTX_free(context);
+                context = nullptr;
+                printf("Failed to use certificate file\n");
+                return false;
+            }
+
+            if (SSL_CTX_use_PrivateKey_file(context, privateKeyPath, SSL_FILETYPE_PEM) <= 0) {
+                SSL_CTX_free(context);
+                context = nullptr;
+                printf("Failed to use private key file\n");
+                return false;
+            }
+
+            if (!SSL_CTX_check_private_key(context)) {
+                SSL_CTX_free(context);
+                context = nullptr;
+                printf("Failed to check private key\n");
+                return false;
+            }
+            return true;
+        } else {
+            context = SSL_CTX_new(TLS_method());
+            if(context == nullptr) {
+                printf("Failed to create SSL context\n");
+                return false;
+            }
+            return true;
+        }
     }
 
     //////////////////////////
@@ -563,11 +587,11 @@ namespace httppp {
 
     }
 
-    NetworkStream::NetworkStream(const Socket &socket) {
+    NetworkStream::NetworkStream(Socket socket) {
         this->socket = socket;
     }
 
-    NetworkStream::NetworkStream(const Socket &socket, const SslStream &ssl) {
+    NetworkStream::NetworkStream(Socket &socket, SslStream ssl) {
         this->socket = socket;
         this->ssl = ssl;
     }
@@ -737,6 +761,76 @@ namespace httppp {
 
         file.close(); // Close the file
         return totalBytes;
+    }
+
+    //////////////////////////
+    //////////[File]//////////
+    //////////////////////////
+
+    bool File::exists(const std::string &filePath) {
+        namespace fs = std::filesystem;
+        return fs::exists(filePath) && fs::is_regular_file(filePath);
+    }
+
+    bool File::isWithinDirectory(const std::string &filePath, const std::string &directoryPath) {
+        namespace fs = std::filesystem;
+        fs::path directorypath = fs::absolute(directoryPath);
+        fs::path filepath = fs::absolute(filePath);
+
+        auto const normRoot = fs::canonical(directorypath);
+        auto const normChild = fs::canonical(filepath);
+        
+        auto itr = std::search(normChild.begin(), normChild.end(), 
+                            normRoot.begin(), normRoot.end());
+        
+        return itr == normChild.begin();
+    }
+
+    size_t File::getSize(const std::string &filePath) {
+        namespace fs = std::filesystem;
+        return fs::file_size(filePath);
+    }
+
+    std::string File::getExtension(const std::string &filePath) {
+        if (filePath.size() == 0)
+            return "";
+
+        const char directorySeparatorChar = '\\';
+        const char altDirectorySeparatorChar = '/';
+        const char volumeSeparatorChar = ':';
+
+        size_t length = filePath.size();
+
+        for (int i = length; --i > 0;) {
+            char ch = filePath[i];
+
+            if (ch == '.') {
+                if (i != length - 1)
+                    return filePath.substr(i, length - i);
+                else
+                    return "";
+            }
+
+            if (ch == directorySeparatorChar || ch == altDirectorySeparatorChar || ch == volumeSeparatorChar)
+                break;
+        }
+
+        return "";
+    }
+
+    std::string File::readAllText(const std::string &filePath) {
+        std::ifstream file(filePath);
+        std::string str;
+        std::string contents;
+
+        while (std::getline(file, str)) {
+            contents += str;
+            contents.push_back('\n');
+        }
+
+        if (file.is_open())
+            file.close();
+        return contents;
     }
 
     //////////////////////////
@@ -959,15 +1053,11 @@ namespace httppp {
 
     void Server::stop() {
         isRunning.store(false);        
-    }
+    }    
 
     void Server::listen() {
-
         if(configuration.useHttps) {
-            try {
-                sslContext = SslContext(configuration.certificatePath, configuration.privateKeyPath);
-            } catch (const SslException &ex) {
-                printf("Failed to initialize SslContext: %s\n", ex.what());
+            if(!sslContext.initialize(configuration.certificatePath.c_str(), configuration.privateKeyPath.c_str())) {
                 isRunning.store(false);
                 return;
             }
@@ -976,12 +1066,9 @@ namespace httppp {
         SocketOption options = SocketOption_Reuse | SocketOption_NonBlocking;
 
         if(configuration.useHttps) {
-            if(configuration.useHttpsForwarding) {
+            if(configuration.useHttpsForwarding)
                 listeners.emplace_back(configuration.bindAddress, configuration.port, 10, options);
-                listeners.emplace_back(configuration.bindAddress, configuration.portHttps, 10, options);
-            } else {
-                listeners.emplace_back(configuration.bindAddress, configuration.portHttps, 10, options);
-            }
+            listeners.emplace_back(configuration.bindAddress, configuration.portHttps, 10, options);
         } else {
             listeners.emplace_back(configuration.bindAddress, configuration.port, 10, options);
         }
@@ -995,12 +1082,9 @@ namespace httppp {
         }
 
         if(configuration.useHttps) {
-            if(configuration.useHttpsForwarding) {
+            if(configuration.useHttpsForwarding)
                 printf("Server listening on http://%s:%zu\n", configuration.hostName.c_str(), configuration.port);
-                printf("Server listening on https://%s:%zu\n", configuration.hostName.c_str(), configuration.portHttps);
-            } else {
-                printf("Server listening on https://%s:%zu\n", configuration.hostName.c_str(), configuration.portHttps);
-            }
+            printf("Server listening on https://%s:%zu\n", configuration.hostName.c_str(), configuration.portHttps);
         } else {
             printf("Server listening on http://%s:%zu\n", configuration.hostName.c_str(), configuration.port);
         }
@@ -1027,7 +1111,7 @@ namespace httppp {
                 }
             }
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
 
     cleanup:
